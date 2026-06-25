@@ -1,27 +1,30 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../utils/api'
 import toast from 'react-hot-toast'
 import StatCard from '../components/StatCard'
 import {
   Users, ClipboardList, IndianRupee, Plus, CheckCircle,
-  RefreshCw, Download, Send, Eye, X, Search,
-  Phone, Image as ImageIcon, MapPin, FileText, UserCheck
+  RefreshCw, Download, Send, Eye, X,
+  Phone, Image as ImageIcon, UserCheck, Search, Activity
 } from 'lucide-react'
 
 export default function AdminPanel() {
+  const navigate = useNavigate()
   const [employees, setEmployees] = useState([])
   const [fieldWorks, setFieldWorks] = useState([])
   const [summary, setSummary] = useState({})
-  const [tab, setTab] = useState('dashboard')
   const [loading, setLoading] = useState(true)
   const [showCreateEmp, setShowCreateEmp] = useState(false)
   const [showCreateFW, setShowCreateFW] = useState(false)
   const [showDetail, setShowDetail] = useState(null)
   const [detailData, setDetailData] = useState(null)
-  const [search, setSearch] = useState('')
 
   const [newEmp, setNewEmp] = useState({ name: '', email: '', phone: '', password: '' })
   const [newFW, setNewFW] = useState({ employee_id: '', title: '', location: '', description: '' })
+
+  const [activeTab, setActiveTab] = useState('active') // active | completed | employees
+  const [search, setSearch] = useState('')
 
   const fetchAll = async () => {
     setLoading(true)
@@ -63,19 +66,19 @@ export default function AdminPanel() {
   }
 
   const completeFieldWork = async (id) => {
-  if (!window.confirm('Mark this field work as completed? This will automatically send the report to your company WhatsApp number.')) return
-  try {
-    const res = await api.put(`/field-works/${id}/complete`)
-    if (res.data.whatsapp_sent) {
-      toast.success('Field work completed & WhatsApp report sent! ✅')
-    } else {
-      toast.success('Field work completed')
-      toast.error(res.data.whatsapp_error || 'WhatsApp report could not be sent — you can resend manually')
-    }
-    fetchAll()
-    if (showDetail === id) setShowDetail(null)
-  } catch (err) { toast.error(err.response?.data?.error || 'Failed') }
-}
+    if (!window.confirm('Mark this field work as completed? This will automatically send the report to your company WhatsApp number.')) return
+    try {
+      const res = await api.put(`/field-works/${id}/complete`)
+      if (res.data.whatsapp_sent) {
+        toast.success('Field work completed & WhatsApp report sent! ✅')
+      } else {
+        toast.success('Field work completed')
+        if (res.data.whatsapp_error) toast.error(res.data.whatsapp_error)
+      }
+      fetchAll()
+      if (showDetail === id) setShowDetail(null)
+    } catch (err) { toast.error(err.response?.data?.error || 'Failed') }
+  }
 
   const viewDetail = async (id) => {
     setShowDetail(id)
@@ -86,21 +89,19 @@ export default function AdminPanel() {
   }
 
   const downloadReport = async (id, title) => {
-  try {
-    const res = await api.get(`/reports/generate/${id}`, { responseType: 'blob' })
-    const url = URL.createObjectURL(res.data)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `Report_${title?.replace(/ /g, '_')}_${id}.pdf`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    toast.success('Report downloaded!')
-  } catch (err) {
-    toast.error('Failed to download report')
+    try {
+      const res = await api.get(`/reports/generate/${id}`, { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Report_${title?.replace(/ /g, '_')}_${id}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Report downloaded!')
+    } catch { toast.error('Failed to download report') }
   }
-}
 
   const sendWhatsApp = async (id) => {
     toast.loading('Sending WhatsApp report...')
@@ -120,10 +121,27 @@ export default function AdminPanel() {
     return !activeWork
   })
 
-  const filteredFW = fieldWorks.filter(fw =>
+  const activeWorks = fieldWorks.filter(fw => fw.status === 'active')
+  const completedWorks = fieldWorks.filter(fw => fw.status === 'completed')
+
+  const filteredActive = activeWorks.filter(fw =>
     fw.title?.toLowerCase().includes(search.toLowerCase()) ||
     fw.employee_name?.toLowerCase().includes(search.toLowerCase())
   )
+  const filteredCompleted = completedWorks.filter(fw =>
+    fw.title?.toLowerCase().includes(search.toLowerCase()) ||
+    fw.employee_name?.toLowerCase().includes(search.toLowerCase())
+  )
+  const filteredEmployees = employees.filter(emp =>
+    emp.name?.toLowerCase().includes(search.toLowerCase()) ||
+    emp.email?.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const tabs = [
+    { key: 'active', label: 'Active Duty', count: activeWorks.length, viewAll: '/admin/active-duty' },
+    { key: 'completed', label: 'Completed Duty', count: completedWorks.length, viewAll: '/admin/completed-duty' },
+    { key: 'employees', label: 'All Employees', count: employees.length, viewAll: '/admin/employees' },
+  ]
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -160,28 +178,45 @@ export default function AdminPanel() {
         <StatCard icon={<IndianRupee size={22} />} label="Total Spent" value={`₹${(summary.total_expenses || 0).toLocaleString('en-IN')}`} color="purple" />
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-2xl w-fit">
-        {[['dashboard','Overview'],['employees','Employees'],['fieldworks','Field Works']].map(([key, label]) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all
-              ${tab === key ? 'bg-white text-primary-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-            {label}
+      {/* Tab Switcher - Left to Right */}
+      <div className="card space-y-5">
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+          <div className="flex gap-1 bg-slate-100 p-1.5 rounded-2xl w-full sm:w-fit overflow-x-auto">
+            {tabs.map(tab => (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                className={`px-4 sm:px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2
+                  ${activeTab === tab.key ? 'bg-primary-800 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 hover:bg-white'}`}>
+                {tab.label}
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold
+                  ${activeTab === tab.key ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+          <button onClick={() => navigate(tabs.find(t => t.key === activeTab).viewAll)}
+            className="text-xs font-bold text-primary-800 hover:underline flex-shrink-0 self-start sm:self-auto">
+            View Full Page →
           </button>
-        ))}
-      </div>
+        </div>
 
-      {/* Dashboard Tab */}
-      {tab === 'dashboard' && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {/* Active Field Works */}
-          <div className="card">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-              <h2 className="font-bold text-slate-800">Active Field Works</h2>
+        {/* Search bar */}
+        <div className="relative w-full sm:w-80">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input className="input-field pl-10 py-2.5 text-sm" placeholder="Search..."
+            value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+
+        {/* ACTIVE DUTY TAB */}
+        {activeTab === 'active' && (
+          filteredActive.length === 0 ? (
+            <div className="text-center py-14 text-slate-400">
+              <Activity size={40} className="mx-auto mb-3 opacity-25" />
+              <p className="text-sm font-medium">{activeWorks.length === 0 ? 'No active field works' : 'No matches found'}</p>
             </div>
-            <div className="space-y-3">
-              {fieldWorks.filter(fw => fw.status === 'active').map(fw => (
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {filteredActive.slice(0, 6).map(fw => (
                 <div key={fw.id} className="bg-slate-50 rounded-xl p-3 border border-slate-200">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
@@ -203,17 +238,20 @@ export default function AdminPanel() {
                   </div>
                 </div>
               ))}
-              {fieldWorks.filter(fw => fw.status === 'active').length === 0 && (
-                <p className="text-center text-slate-400 text-sm py-8">No active field works</p>
-              )}
             </div>
-          </div>
+          )
+        )}
 
-          {/* Completed Field Works */}
-          <div className="card">
-            <h2 className="font-bold text-slate-800 mb-4">Completed Field Works</h2>
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-              {fieldWorks.filter(fw => fw.status === 'completed').map(fw => (
+        {/* COMPLETED DUTY TAB */}
+        {activeTab === 'completed' && (
+          filteredCompleted.length === 0 ? (
+            <div className="text-center py-14 text-slate-400">
+              <CheckCircle size={40} className="mx-auto mb-3 opacity-25" />
+              <p className="text-sm font-medium">{completedWorks.length === 0 ? 'No completed works' : 'No matches found'}</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredCompleted.slice(0, 6).map(fw => (
                 <div key={fw.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition-colors">
                   <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                     {fw.employee_name?.charAt(0)}
@@ -235,106 +273,48 @@ export default function AdminPanel() {
                   </div>
                 </div>
               ))}
-              {fieldWorks.filter(fw => fw.status === 'completed').length === 0 && (
-                <p className="text-center text-slate-400 text-sm py-8">No completed works</p>
-              )}
             </div>
-          </div>
-        </div>
-      )}
+          )
+        )}
 
-      {/* Employees Tab */}
-      {tab === 'employees' && (
-        <div className="card">
-          <h2 className="font-bold text-slate-800 mb-4">All Employees ({employees.length})</h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {employees.map(emp => {
-              const activeWork = fieldWorks.find(fw => fw.employee_id === emp.id && fw.status === 'active')
-              return (
-                <div key={emp.id} className="border border-slate-200 rounded-xl p-4 hover:shadow-card-hover transition-shadow">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary-800 flex items-center justify-center text-white font-bold">
-                      {emp.name?.charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-800 text-sm truncate">{emp.name}</p>
-                      <span className={activeWork ? 'badge-active' : 'inline-flex items-center gap-1 bg-slate-100 text-slate-500 text-xs font-semibold px-2 py-0.5 rounded-full'}>
-                        {activeWork ? '● On Duty' : '○ Available'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5 text-xs text-slate-500">
-                    <p className="flex items-center gap-1.5"><Phone size={11}/>{emp.phone || 'N/A'}</p>
-                    <p className="flex items-center gap-1.5 truncate">📧 {emp.email}</p>
-                    {activeWork && (
-                      <div className="mt-2 pt-2 border-t border-slate-100">
-                        <p className="text-xs font-medium text-slate-700 truncate">📍 {activeWork.title}</p>
-                        <p className="text-xs text-emerald-600 font-bold mt-0.5">₹{parseFloat(activeWork.total_expense||0).toLocaleString('en-IN')} spent</p>
+        {/* EMPLOYEES TAB */}
+        {activeTab === 'employees' && (
+          filteredEmployees.length === 0 ? (
+            <p className="text-slate-400 text-sm text-center py-14">{employees.length === 0 ? 'No employees yet' : 'No matches found'}</p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredEmployees.slice(0, 6).map(emp => {
+                const activeWork = fieldWorks.find(fw => fw.employee_id === emp.id && fw.status === 'active')
+                return (
+                  <div key={emp.id} className="border border-slate-200 rounded-xl p-4 hover:shadow-card-hover transition-shadow">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-primary-800 flex items-center justify-center text-white font-bold">
+                        {emp.name?.charAt(0)}
                       </div>
-                    )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-800 text-sm truncate">{emp.name}</p>
+                        <span className={activeWork ? 'badge-active' : 'inline-flex items-center gap-1 bg-slate-100 text-slate-500 text-xs font-semibold px-2 py-0.5 rounded-full'}>
+                          {activeWork ? '● On Duty' : '○ Available'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 text-xs text-slate-500">
+                      <p className="flex items-center gap-1.5"><Phone size={11}/>{emp.phone || 'N/A'}</p>
+                      <p className="flex items-center gap-1.5 truncate">📧 {emp.email}</p>
+                      {activeWork && (
+                        <div className="mt-2 pt-2 border-t border-slate-100">
+                          <p className="text-xs font-medium text-slate-700 truncate">📍 {activeWork.title}</p>
+                          <p className="text-xs text-emerald-600 font-bold mt-0.5">₹{parseFloat(activeWork.total_expense||0).toLocaleString('en-IN')} spent</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Field Works Tab */}
-      {tab === 'fieldworks' && (
-        <div className="card space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-            <h2 className="font-bold text-slate-800">All Field Works ({fieldWorks.length})</h2>
-            <div className="relative w-full sm:w-64">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input className="input-field pl-9 py-2 text-xs" placeholder="Search..."
-                value={search} onChange={e => setSearch(e.target.value)} />
+                )
+              })}
             </div>
-          </div>
-          <div className="space-y-2">
-            {filteredFW.map(fw => (
-              <div key={fw.id} className="border border-slate-200 rounded-xl p-4 hover:border-slate-300 hover:shadow-card transition-all">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${fw.status === 'active' ? 'bg-emerald-600' : 'bg-blue-600'}`}>
-                      {fw.employee_name?.charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-800 text-sm">{fw.title}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{fw.employee_name} • {fw.location || 'N/A'}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">Started: {fw.started_at?.slice(0,16)}</p>
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0 text-right">
-                    <span className={fw.status === 'active' ? 'badge-active' : 'badge-completed'}>
-                      {fw.status === 'active' ? '● Active' : '✓ Done'}
-                    </span>
-                    <p className="font-bold text-slate-800 text-base mt-1">₹{parseFloat(fw.total_expense||0).toLocaleString('en-IN')}</p>
-                  </div>
-                </div>
-                <div className="flex gap-2 mt-3 flex-wrap">
-                  <button onClick={() => viewDetail(fw.id)} className="flex items-center gap-1 text-xs text-primary-800 bg-primary-50 hover:bg-primary-100 px-3 py-1.5 rounded-lg font-medium transition-colors">
-                    <Eye size={12} />View Details
-                  </button>
-                  {fw.status === 'active' && (
-                    <button onClick={() => completeFieldWork(fw.id)} className="flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg font-medium transition-colors">
-                      <CheckCircle size={12} />Complete
-                    </button>
-                  )}
-                  <button onClick={() => downloadReport(fw.id, fw.title)} className="flex items-center gap-1 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg font-medium transition-colors">
-                    <Download size={12} />PDF Report
-                  </button>
-                  {fw.status === 'completed' && (
-                    <button onClick={() => sendWhatsApp(fw.id)} className="flex items-center gap-1 text-xs text-green-700 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg font-medium transition-colors">
-                      <Send size={12} />WhatsApp
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+          )
+        )}
+      </div>
 
       {/* Field Work Detail Modal */}
       {showDetail && (
@@ -348,7 +328,6 @@ export default function AdminPanel() {
             </div>
             {detailData ? (
               <div className="overflow-y-auto p-5 flex-1 space-y-4">
-                {/* Info */}
                 <div className="bg-slate-50 rounded-xl p-4 grid grid-cols-2 gap-3 text-sm">
                   <div><p className="text-xs text-slate-500 mb-0.5">Title</p><p className="font-semibold text-slate-800">{detailData.title}</p></div>
                   <div><p className="text-xs text-slate-500 mb-0.5">Employee</p><p className="font-semibold text-slate-800">{detailData.employee_name}</p></div>
@@ -362,14 +341,13 @@ export default function AdminPanel() {
                   <div><p className="text-xs text-slate-500 mb-0.5">Ended</p><p className="font-semibold text-slate-800">{detailData.completed_at?.slice(0,16) || 'In Progress'}</p></div>
                 </div>
 
-                {/* Expenses */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="font-bold text-slate-800">Expenses ({detailData.expenses?.length || 0})</h4>
                     <span className="text-lg font-bold text-primary-800">Total: ₹{parseFloat(detailData.total_expense||0).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="space-y-2">
-                    {detailData.expenses?.map((exp, i) => (
+                    {detailData.expenses?.map((exp) => (
                       <div key={exp.id} className="border border-slate-200 rounded-xl p-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1">

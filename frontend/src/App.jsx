@@ -5,7 +5,13 @@ import LoginPage from './pages/LoginPage'
 import MasterPanel from './pages/MasterPanel'
 import AdminPanel from './pages/AdminPanel'
 import EmployeePanel from './pages/EmployeePanel'
+import AllFieldWorksPage from './pages/AllFieldWorksPage'
+import AllEmployeesPage from './pages/AllEmployeesPage'
+import AllAdminsPage from './pages/AllAdminsPage'
+import ActiveDutyPage from './pages/ActiveDutyPage'
+import CompletedDutyPage from './pages/CompletedDutyPage'
 import Layout from './components/Layout'
+import AllEmployeesMasterPage from './pages/AllEmployeesMasterPage'
 
 function ProtectedRoute({ children, roles }) {
   const { user, loading } = useAuth()
@@ -40,21 +46,49 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/dashboard" element={<DashboardRedirect />} />
+
+      {/* Master */}
       <Route path="/master" element={
-        <ProtectedRoute roles={['master']}>
-          <Layout><MasterPanel /></Layout>
-        </ProtectedRoute>
+        <ProtectedRoute roles={['master']}><Layout><MasterPanel /></Layout></ProtectedRoute>
       } />
+      <Route path="/master/field-works" element={
+        <ProtectedRoute roles={['master']}><Layout><AllFieldWorksPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/master/admins" element={
+        <ProtectedRoute roles={['master']}><Layout><AllAdminsPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/master/active-duty" element={
+        <ProtectedRoute roles={['master']}><Layout><ActiveDutyPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/master/completed-duty" element={
+        <ProtectedRoute roles={['master']}><Layout><CompletedDutyPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/master/employees" element={
+        <ProtectedRoute roles={['master']}><Layout><AllEmployeesMasterPage /></Layout></ProtectedRoute>
+      } />
+
+      {/* Admin */}
       <Route path="/admin" element={
-        <ProtectedRoute roles={['admin', 'master']}>
-          <Layout><AdminPanel /></Layout>
-        </ProtectedRoute>
+        <ProtectedRoute roles={['admin', 'master']}><Layout><AdminPanel /></Layout></ProtectedRoute>
       } />
+      <Route path="/admin/employees" element={
+        <ProtectedRoute roles={['admin', 'master']}><Layout><AllEmployeesPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/admin/field-works" element={
+        <ProtectedRoute roles={['admin', 'master']}><Layout><AllFieldWorksPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/admin/active-duty" element={
+        <ProtectedRoute roles={['admin', 'master']}><Layout><ActiveDutyPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/admin/completed-duty" element={
+        <ProtectedRoute roles={['admin', 'master']}><Layout><CompletedDutyPage /></Layout></ProtectedRoute>
+      } />
+
+      {/* Employee */}
       <Route path="/employee" element={
-        <ProtectedRoute roles={['employee']}>
-          <Layout><EmployeePanel /></Layout>
-        </ProtectedRoute>
+        <ProtectedRoute roles={['employee']}><Layout><EmployeePanel /></Layout></ProtectedRoute>
       } />
+
       <Route path="*" element={<Navigate to="/dashboard" />} />
     </Routes>
   )

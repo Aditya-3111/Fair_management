@@ -524,8 +524,6 @@ def send_whatsapp(fw_id):
 
 
 def _send_whatsapp_report(fw_id):
-    """Internal: builds composite image, uploads to Cloudinary, sends WhatsApp template"""
-    import cloudinary.uploader
     try:
         conn = get_connection()
         with conn.cursor() as cur:
@@ -557,26 +555,44 @@ def _send_whatsapp_report(fw_id):
             if exp.get('added_at'):
                 exp['added_at'] = str(exp['added_at'])
 
-        # Build composite report image with all screenshots embedded
-        image_buffer, total = generate_whatsapp_image(field_work, expenses)
-
-        # Upload composite image to Cloudinary so WhatsApp can fetch it via public URL
-        upload_result = cloudinary.uploader.upload(
-            image_buffer,
-            folder='fair_management/reports',
-            resource_type='image'
-        )
-        report_image_url = upload_result['secure_url']
+        # Generate PDF
+        pdf_buffer, total = generate_pdf_report(field_work, expenses)
 
         company_name = os.getenv('COMPANY_NAME', 'Venus Security')
         phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
         access_token = os.getenv('WHATSAPP_ACCESS_TOKEN')
         to_number = os.getenv('COMPANY_WHATSAPP_NUMBER')
-        template_name = os.getenv('WHATSAPP_TEMPLATE_NAME', 'fair_expense_report')
+        template_name = os.getenv('WHATSAPP_TEMPLATE_NAME', 'fair_expense_report_pdf')
 
         if not phone_number_id or not access_token or not to_number:
             return jsonify({'error': 'WhatsApp not configured. Please set env variables.'}), 500
 
+        filename = f"Report_{field_work['title'].replace(' ', '_')}.pdf"
+
+        # ✅ Step 1: Upload PDF to WhatsApp Media API
+        media_upload_response = requests.post(
+            f"https://graph.facebook.com/v18.0/{phone_number_id}/media",
+            headers={
+                "Authorization": f"Bearer {access_token}"
+            },
+            files={
+                "file": (filename, pdf_buffer, "application/pdf"),
+            },
+            data={
+                "messaging_product": "whatsapp",
+                "type": "application/pdf"
+            }
+        )
+
+        print(f"Media Upload Status: {media_upload_response.status_code}")
+        print(f"Media Upload Body: {media_upload_response.text}")
+
+        if media_upload_response.status_code != 200:
+            return jsonify({'error': 'Failed to upload PDF to WhatsApp', 'details': media_upload_response.json()}), 500
+
+        media_id = media_upload_response.json().get("id")
+
+        # ✅ Step 2: Send template message with media_id
         payload = {
             "messaging_product": "whatsapp",
             "to": to_number,
@@ -588,7 +604,13 @@ def _send_whatsapp_report(fw_id):
                     {
                         "type": "header",
                         "parameters": [
-                            {"type": "image", "image": {"link": report_image_url}}
+                            {
+                                "type": "document",
+                                "document": {
+                                    "id": media_id,       # ✅ media_id instead of link
+                                    "filename": filename
+                                }
+                            }
                         ]
                     },
                     {
@@ -607,22 +629,27 @@ def _send_whatsapp_report(fw_id):
 
         response = requests.post(
             f"https://graph.facebook.com/v18.0/{phone_number_id}/messages",
-            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            },
             json=payload
         )
 
+       
         if response.status_code == 200:
             conn2 = get_connection()
             with conn2.cursor() as cur2:
                 cur2.execute("UPDATE field_works SET report_sent = TRUE WHERE id = %s", (fw_id,))
             conn2.close()
-            return jsonify({'message': 'WhatsApp report sent successfully', 'image_url': report_image_url})
+            return jsonify({'message': 'WhatsApp PDF report sent successfully', 'media_id': media_id})
         else:
             return jsonify({'error': 'WhatsApp send failed', 'details': response.json()}), 500
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500    
     
 @reports_bp.route('/summary', methods=['GET'])
 @jwt_required()

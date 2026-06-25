@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, ClipboardList, LogOut,
-  Menu, X, Shield, ChevronRight
+  Menu, X, Shield, ChevronRight, UserCheck, CheckCircle, UserCog
 } from 'lucide-react'
 
 export default function Layout({ children }) {
@@ -25,9 +25,24 @@ export default function Layout({ children }) {
   }
 
   const navMap = {
-    master: [{ path: '/master', label: 'Master Dashboard', icon: LayoutDashboard }],
-    admin: [{ path: '/admin', label: 'Admin Dashboard', icon: LayoutDashboard }],
-    employee: [{ path: '/employee', label: 'My Field Work', icon: ClipboardList }]
+    master: [
+      { path: '/master', label: 'Overview', icon: LayoutDashboard },
+      { path: '/master/active-duty', label: 'Active Duty', icon: UserCheck },
+      { path: '/master/completed-duty', label: 'Completed Duty', icon: CheckCircle },
+      { path: '/master/field-works', label: 'All Field Works', icon: ClipboardList },
+      { path: '/master/admins', label: 'All Admins', icon: UserCog },
+      { path: '/master/employees', label: 'All Employees', icon: Users },
+    ],
+    admin: [
+      { path: '/admin', label: 'Overview', icon: LayoutDashboard },
+      { path: '/admin/active-duty', label: 'Active Duty', icon: UserCheck },
+      { path: '/admin/completed-duty', label: 'Completed Duty', icon: CheckCircle },
+      { path: '/admin/field-works', label: 'All Field Works', icon: ClipboardList },
+      { path: '/admin/employees', label: 'All Employees', icon: Users },
+    ],
+    employee: [
+      { path: '/employee', label: 'My Field Work', icon: ClipboardList }
+    ]
   }
   const navItems = navMap[user?.role] || []
 
@@ -37,7 +52,6 @@ export default function Layout({ children }) {
         <div className="fixed inset-0 bg-black/50 z-30 lg:hidden backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar - full height, sticky, flex column from top to bottom */}
       <aside className={`
         fixed lg:sticky top-0 left-0 h-screen w-72 z-40
         bg-gradient-to-b from-primary-900 via-primary-800 to-primary-900
@@ -46,7 +60,6 @@ export default function Layout({ children }) {
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0
       `}>
-        {/* Logo Header */}
         <div className="px-5 py-5 border-b border-white/10 flex items-center gap-3 flex-shrink-0">
           <img src="/logo.jpeg" alt="Venus Logo" className="w-11 h-11 rounded-xl object-cover shadow-lg ring-2 ring-white/20" />
           <div className="flex-1 min-w-0">
@@ -58,7 +71,6 @@ export default function Layout({ children }) {
           </button>
         </div>
 
-        {/* User Card */}
         <div className="px-5 py-4 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center gap-3 bg-white/5 rounded-2xl p-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-md">
@@ -73,7 +85,6 @@ export default function Layout({ children }) {
           </div>
         </div>
 
-        {/* Nav - grows to fill remaining space */}
         <nav className="flex-1 overflow-y-auto px-4 py-5 space-y-1">
           <p className="text-blue-300/50 text-[11px] font-bold uppercase tracking-wider px-3 mb-2">Menu</p>
           {navItems.map(item => {
@@ -94,7 +105,6 @@ export default function Layout({ children }) {
           })}
         </nav>
 
-        {/* Footer - pinned to bottom */}
         <div className="px-4 py-4 border-t border-white/10 flex-shrink-0 space-y-1">
           <button onClick={handleLogout}
             className="flex items-center gap-3 w-full px-3.5 py-3 rounded-xl text-red-300 hover:bg-red-500/15 hover:text-red-200 transition-all text-sm font-semibold">
@@ -105,7 +115,6 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-screen min-w-0">
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 py-3.5 flex items-center gap-3 sticky top-0 z-20 shadow-sm">
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 rounded-xl hover:bg-slate-100 text-slate-600 -ml-1">
